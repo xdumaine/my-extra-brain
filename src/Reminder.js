@@ -1,5 +1,6 @@
 import AlexaSkill from './AlexaSkill.js';
-var AWS = require('aws-sdk');
+const AWS = require('aws-sdk');
+const moment = require('moment');
 
 export default class Reminder extends AlexaSkill {
   static get slots () {
@@ -56,12 +57,12 @@ export default class Reminder extends AlexaSkill {
   }
 
   handleNewReminderRequest (intent, session, response) {
-    var action = this.getAction(intent, session, Reminder.slots);
+    const action = this.getAction(intent, session, Reminder.slots);
 
     console.log('Handling new reminder request to', action.reminder, action.duration, action.time, action.day);
 
     if (!action.duration && !action.day && !action.time) {
-      var speechOutput = {
+      const speechOutput = {
         speech: '<speak>When would you like to be reminded?</speak>',
         type: AlexaSkill.speechOutputType.SSML
       };
@@ -85,21 +86,21 @@ export default class Reminder extends AlexaSkill {
       return;
     }
 
-    var done = 'Your reminder to ' + action.reminder + ' is set for ';
+    let time = '';
     if (action.time) {
-      done += action.time;
+      time = action.time;
       if (action.day) {
-        done += ' on ' + action.day;
+        time += ' on ' + action.day;
       }
     } else if (action.day) {
-      done += action.day;
+      time = action.day;
     } else if (action.duration) {
-      done += action.duration;
+      time = `${moment.duration(action.duration).humanize()} from now`
     }
-    done += '.';
+    const done = `Your reminder to ${action.reminder} is set for ${time}.`;
 
     var params = {
-      Message: 'RemindMe: "' + action.reminder + '"', /* required */
+      Message: `RemindMe: "${action.reminder}" for ${moment.duration(action.duration).humanize()} from now`,
       PhoneNumber: '+17408565809'
     };
     var sns = new AWS.SNS();
