@@ -1,0 +1,12 @@
+RemindMe at {time} to {buy milk|reminder}
+RemindMe on {day} at {time} to {pick up the dry cleaning|reminder}
+RemindMe in {duration} to {leave for work|reminder}
+RemindMe at {time} on {day} to {wash my car|reminder}
+RemindMe at {time} to {clip my nails|reminder}
+RemindMe on {day} to {empty the dishwasher|reminder}
+RemindMe to {sweep the floor|reminder} on {day}
+RemindMe to {eat breakfast|reminder} on {day} at {time}
+RemindMe to {call grandma|reminder} at {time} on {day}
+RemindMe to {go for a bike ride|reminder} at {time}
+RemindMe to {check the cookies|reminder} in {duration}
+RemindMe {phoneNumber}

@@ -1,10 +1,11 @@
 import AlexaSkill from './AlexaSkill.js';
 const AWS = require('aws-sdk');
 const moment = require('moment');
+const dynamodb = new AWS.DynamoDB();
 
 export default class Reminder extends AlexaSkill {
   static get slots () {
-    return ['reminder', 'duration', 'day', 'time'];
+    return ['reminder', 'duration', 'day', 'time', 'phoneNumber'];
   }
 
   get eventHandlers () {
@@ -47,7 +48,7 @@ export default class Reminder extends AlexaSkill {
   getAction (intent, session, properties) {
     const action = {};
     properties.forEach(function (property) {
-      if (intent.slots[property]) {
+      if (intent.slots[property] && intent.slots[property].value) {
         action[property] = intent.slots[property].value;
       } else {
         action[property] = session.attributes[property];
@@ -59,8 +60,76 @@ export default class Reminder extends AlexaSkill {
   handleNewReminderRequest (intent, session, response) {
     const action = this.getAction(intent, session, Reminder.slots);
 
-    console.log('Handling new reminder request to', action.reminder, action.duration, action.time, action.day);
+    console.log('Handling new reminder request to: ', action.reminder, action.duration, action.time, action.day, action.phoneNumber);
 
+    Reminder.slots.forEach(function (property) {
+      session.attributes[property] = action[property];
+    });
+
+    if (action.phoneNumber) {
+      return this.writePhoneNumber({ intent, session, response, action });
+    }
+
+    this.lookupPhoneNumber({ intent, session, response, action });
+  }
+
+  writePhoneNumber ({intent, session, response, action}) {
+    const params = {
+      Item: {
+        userId: {
+          S: session.user.userId
+        },
+        phoneNumber: {
+          S: action.phoneNumber
+        }
+      },
+      TableName: 'RemindMeNumbers'
+    };
+
+    dynamodb.putItem(params, (err, data) => {
+      if (err) {
+        console.log(err, err.stack); // an error occurred
+        response.tell('Sorry, sending the reminder failed.');
+        return;
+      }
+
+      this.continueRequest({ intent, session, response, action });
+    });
+  }
+
+  lookupPhoneNumber ({intent, session, response, action}) {
+    const params = {
+      Key: {
+        'userId': {
+          S: session.user.userId
+        }
+      },
+      TableName: 'RemindMeNumbers'
+    };
+
+    dynamodb.getItem(params, (err, data) => {
+      if (err) {
+        console.log(err, err.stack); // an error occurred
+        response.tell('Sorry, sending the reminder failed.');
+        return;
+      }
+      console.log('Pulled user from dynamo', data);
+      if (!data.Item) {
+        return this.respondForPhoneNumber({ intent, session, response, action });
+      }
+      action.phoneNumber = session.attributes.phoneNumber = data.Item.phoneNumber.S;
+
+      this.continueRequest({ intent, session, response, action });
+    });
+  }
+
+  respondForPhoneNumber ({intent, session, response, action}) {
+    const responseText = `I'll need your phone number to send you reminders. You'll only have to tell me once. What number should I use for sending reminders?`;
+    const shortResponse = `What phone number should I use for sending you reminders?`;
+    response.ask(responseText, shortResponse);
+  }
+
+  continueRequest ({intent, session, response, action}) {
     if (!action.duration && !action.day && !action.time) {
       const speechOutput = {
         speech: '<speak>When would you like to be reminded?</speak>',
@@ -70,10 +139,6 @@ export default class Reminder extends AlexaSkill {
       response.ask(speechOutput, speechOutput);
       return;
     }
-
-    Reminder.slots.forEach(function (property) {
-      session.attributes[property] = action[property];
-    });
 
     if (!action.reminder) {
       var reminderPrompt = 'What should I remind you to do?';
@@ -86,24 +151,27 @@ export default class Reminder extends AlexaSkill {
       return;
     }
 
+    this.sendMessage({action, response});
+  }
+
+  sendMessage ({action, response}) {
     let time = '';
     if (action.time) {
       time = action.time;
       if (action.day) {
         time += ' on ' + action.day;
+      } else if (action.day) {
+        time = action.day;
       }
-    } else if (action.day) {
-      time = action.day;
     } else if (action.duration) {
-      time = `${moment.duration(action.duration).humanize()} from now`
+      time = `${moment.duration(action.duration).humanize()} from now`;
     }
     const done = `Your reminder to ${action.reminder} is set for ${time}.`;
-
-    var params = {
+    const params = {
       Message: `RemindMe: "${action.reminder}" for ${moment.duration(action.duration).humanize()} from now`,
       PhoneNumber: '+17408565809'
     };
-    var sns = new AWS.SNS();
+    const sns = new AWS.SNS();
     sns.publish(params, function (err, data) {
       if (err) {
         console.log(err);

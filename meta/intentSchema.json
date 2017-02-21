@@ -1,0 +1,35 @@
+{
+  "intents": [
+    {
+      "intent": "RemindMe",
+      "slots": [
+        {
+          "name": "reminder",
+          "type": "AMAZON.LITERAL"
+        },
+        {
+          "name": "day",
+          "type": "AMAZON.DATE"
+        },
+        {
+          "name": "time",
+          "type": "AMAZON.TIME"
+        },
+        {
+          "name": "duration",
+          "type": "AMAZON.DURATION"
+        },
+        {
+          "name": "phoneNumber",
+          "type": "AMAZON.NUMBER"
+        }
+      ]
+    },
+    {
+      "intent": "AMAZON.HelpIntent"
+    },
+    {
+      "intent": "AMAZON.StopIntent"
+    }
+  ]
+}

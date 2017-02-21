@@ -23,8 +23,7 @@
   },
   "semistandard": {
     "ignore": [
-      "**/dist/",
-      "index.js"
+      "**/dist/"
     ]
   }
 }
