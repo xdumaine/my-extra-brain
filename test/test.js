@@ -9,28 +9,25 @@ describe('reminder', function () {
   beforeEach(() => {});
   afterEach(() => {});
 
-  it('will compute a duration string correctly from just a date', function () {
-    console.log(Reminder);
+  it('will compute a duration correctly from just a date', function () {
     const reminder = new Reminder();
     const oneDayFromNow = moment().add(1, 'days').format('YYYY-MM-DD');
-    const result = reminder.computeTimeString({ day: oneDayFromNow });
-    assert.equal(result, 'a day');
+    const result = reminder.computeDuration({ day: oneDayFromNow });
+    assert.equal(result.humanize(), 'a day');
   });
 
-  it('will compute a duration string correctly from just a time', function () {
-    console.log(Reminder);
+  it('will compute a duration correctly from just a time', function () {
     const reminder = new Reminder();
     const oneHourFromNow = moment().add(1, 'hours').format('HH:mm');
-    const result = reminder.computeTimeString({ time: oneHourFromNow });
-    assert.equal(result, 'an hour');
+    const result = reminder.computeDuration({ time: oneHourFromNow });
+    assert.equal(result.humanize(), 'an hour');
   });
 
-  it('will compute a duration string correctly from a time and a day', function () {
-    console.log(Reminder);
+  it('will compute a duration correctly from a time and a day', function () {
     const reminder = new Reminder();
-    const threeDaysFromNow = moment().add(3, 'days').format('YYYY-MM-DD');
-    const threeHoursFromNow = moment().add(3, 'hours').format('HH:mm');
-    const result = reminder.computeTimeString({ day: threeDaysFromNow, time: threeHoursFromNow });
-    assert.equal(result, '3 days');
+    const day = moment().add(1, 'days').format('YYYY-MM-DD');
+    const time = moment().add(1, 'minute').format('HH:mm');
+    const result = reminder.computeDuration({ day, time });
+    assert.equal(result.humanize(), 'a day');
   });
 });

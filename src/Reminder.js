@@ -154,35 +154,30 @@ export default class Reminder extends AlexaSkill {
     this.sendMessage({action, response});
   }
 
-  computeTimeString (action) {
-    let durationString;
-    console.log('Computing time', action);
+  computeDuration (action) {
     if (action.duration) {
-      durationString = moment.duration(action.duration).humanize();
-    } else {
-      let time;
-      if (action.day) {
-        if (!action.time) {
-          action.time = moment().format('HH:mm');
-        }
-        time = moment(`${action.day} ${action.time}`);
-      } else if (action.time) {
-        time = moment(action.time, 'HH:mm');
-        if (time < moment()) {
-          time.add(1, 'days');
-        }
-      }
-      durationString = moment.duration(moment().diff(time)).humanize();
+      return moment.duration(action.duration);
     }
-    console.log('computed time', durationString);
-    return durationString;
+    let time;
+    if (action.day) {
+      if (!action.time) {
+        action.time = moment().format('HH:mm');
+      }
+      time = moment(`${action.day} ${action.time}`);
+    } else if (action.time) {
+      time = moment(action.time, 'HH:mm');
+      if (time < moment()) {
+        time.add(1, 'days');
+      }
+    }
+    return moment.duration(moment().diff(time));
   }
 
   sendMessage ({action, response}) {
-    const durationString = this.computeTimeString(action);
+    const duration = this.computeDuration(action);
+    const durationString = `${duration.humanize()} from now.`;
 
-    const timeString = `${moment.duration(action.duration).humanize()} from now`;
-    const done = `Your reminder to ${action.reminder} is set for ${timeString}.`;
+    const done = `Your reminder to ${action.reminder} is set for ${durationString}.`;
     const params = {
       Message: `RemindMe: "${action.reminder}" for ${durationString} from now`,
       PhoneNumber: '+17408565809'
