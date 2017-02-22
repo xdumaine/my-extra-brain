@@ -10,3 +10,5 @@ exports.handler = function (event, context) {
   var reminder = new Reminder(APP_ID);
   reminder.execute(event, context);
 };
+
+exports.Reminder = Reminder;

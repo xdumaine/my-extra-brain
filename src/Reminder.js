@@ -154,21 +154,37 @@ export default class Reminder extends AlexaSkill {
     this.sendMessage({action, response});
   }
 
-  sendMessage ({action, response}) {
-    let time = '';
-    if (action.time) {
-      time = action.time;
+  computeTimeString (action) {
+    let durationString;
+    console.log('Computing time', action);
+    if (action.duration) {
+      durationString = moment.duration(action.duration).humanize();
+    } else {
+      let time;
       if (action.day) {
-        time += ' on ' + action.day;
-      } else if (action.day) {
-        time = action.day;
+        if (!action.time) {
+          action.time = moment().format('HH:mm');
+        }
+        time = moment(`${action.day} ${action.time}`);
+      } else if (action.time) {
+        time = moment(action.time, 'HH:mm');
+        if (time < moment()) {
+          time.add(1, 'days');
+        }
       }
-    } else if (action.duration) {
-      time = `${moment.duration(action.duration).humanize()} from now`;
+      durationString = moment.duration(moment().diff(time)).humanize();
     }
-    const done = `Your reminder to ${action.reminder} is set for ${time}.`;
+    console.log('computed time', durationString);
+    return durationString;
+  }
+
+  sendMessage ({action, response}) {
+    const durationString = this.computeTimeString(action);
+
+    const timeString = `${moment.duration(action.duration).humanize()} from now`;
+    const done = `Your reminder to ${action.reminder} is set for ${timeString}.`;
     const params = {
-      Message: `RemindMe: "${action.reminder}" for ${moment.duration(action.duration).humanize()} from now`,
+      Message: `RemindMe: "${action.reminder}" for ${durationString} from now`,
       PhoneNumber: '+17408565809'
     };
     const sns = new AWS.SNS();
