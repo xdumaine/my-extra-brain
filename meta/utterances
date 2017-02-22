@@ -5,8 +5,19 @@ RemindMe at {time} on {day} to {wash my car|reminder}
 RemindMe at {time} to {clip my nails|reminder}
 RemindMe on {day} to {empty the dishwasher|reminder}
 RemindMe to {sweep the floor|reminder} on {day}
+RemindMe to {sweep the floor|reminder} {day}
 RemindMe to {eat breakfast|reminder} on {day} at {time}
 RemindMe to {call grandma|reminder} at {time} on {day}
 RemindMe to {go for a bike ride|reminder} at {time}
 RemindMe to {check the cookies|reminder} in {duration}
 RemindMe {phoneNumber}
+RemindMe {day}
+RemindMe {day} {time}
+RemindMe {day} at {time}
+RemindMe on {day} at {time}
+RemindMe at {day} {time}
+RemindMe {time} {day}
+RemindMe {time} on {day}
+RemindMe {time}
+RemindMe at {time}
+RemindMe in {duration}

@@ -175,11 +175,11 @@ export default class Reminder extends AlexaSkill {
 
   sendMessage ({action, response}) {
     const duration = this.computeDuration(action);
-    const durationString = `${duration.humanize()} from now.`;
+    const durationString = `${duration.humanize()} from now`;
 
     const done = `Your reminder to ${action.reminder} is set for ${durationString}.`;
     const params = {
-      Message: `RemindMe: "${action.reminder}" for ${durationString} from now`,
+      Message: `RemindMe: "${action.reminder}" for ${durationString} from now.`,
       PhoneNumber: '+17408565809'
     };
     const sns = new AWS.SNS();
