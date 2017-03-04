@@ -3,10 +3,19 @@ const AWS = require('aws-sdk');
 const moment = require('moment');
 const dynamodb = new AWS.DynamoDB();
 
+function isValidNumber (phoneNumber) {
+  // TODO: replace this with googLibPhoneNumber
+  return phoneNumber && phoneNumber.length > 6;
+}
+
 export default class Reminder extends AlexaSkill {
   static get slots () {
     return ['reminder', 'duration', 'day', 'time', 'phoneNumber'];
   }
+
+  // ***************************
+  // Static Properties
+  // ***************************
 
   get eventHandlers () {
     const parentEventHandlers = super.eventHandlers;
@@ -27,9 +36,13 @@ export default class Reminder extends AlexaSkill {
 
   get intentHandlers () {
     return {
-      RemindMe (intent, session, response) {
-        this.handleNewReminderRequest(intent, session, response);
-      },
+      RemindMe: this.handleNewReminderRequest.bind(this),
+
+      CheckMy: this.handlePhoneNumberCheckRequest.bind(this),
+      WhatIs: this.handlePhoneNumberCheckRequest.bind(this),
+
+      ChangeMy: this.handlePhoneNumberChangeRequest.bind(this),
+      UpdateMy: this.handlePhoneNumberChangeRequest.bind(this),
 
       'AMAZON.HelpIntent' (intent, session, response) {
         response.ask('You can say "RemindMe at 10pm to wash the car."', 'What can I help you with?');
@@ -45,46 +58,64 @@ export default class Reminder extends AlexaSkill {
     };
   }
 
-  getAction (intent, session, properties) {
+  // ***************************
+  // End Static Properties
+  // ***************************
+
+  // ***************************
+  // Utilities
+  // ***************************
+
+  // parses slot values out of intent into an `action` for easier access
+  // and saves slot values to session attributes
+  getAction (intent, session, slots) {
     const action = {};
-    properties.forEach(function (property) {
-      if (intent.slots[property] && intent.slots[property].value) {
-        action[property] = intent.slots[property].value;
+    slots.forEach(function (slot) {
+      if (intent.slots[slot] && intent.slots[slot].value) {
+        action[slot] = intent.slots[slot].value;
       } else {
-        action[property] = session.attributes[property];
+        action[slot] = session.attributes[slot];
       }
+    });
+    slots.forEach(function (slot) {
+      session.attributes[slot] = action[slot];
     });
     return action;
   }
 
-  handleNewReminderRequest (intent, session, response) {
-    const action = this.getAction(intent, session, Reminder.slots);
-
-    console.log('Handling new reminder request to: ', action.reminder, action.duration, action.time, action.day, action.phoneNumber);
-
-    Reminder.slots.forEach(function (property) {
-      session.attributes[property] = action[property];
-    });
-
-    if (action.phoneNumber) {
-      return this.writePhoneNumber({ intent, session, response, action });
+  // from an `action` compute duration depending on provided slot values
+  // returns Moment::Duration
+  computeDuration (action) {
+    if (action.duration) {
+      return moment.duration(action.duration);
     }
-
-    this.lookupPhoneNumber(session)
-      .then((phoneNumber) => {
-        if (!phoneNumber) {
-          return this.respondForPhoneNumber(response);
-        }
-        action.phoneNumber = session.attributes.phoneNumber = phoneNumber;
-
-        this.continueRequest({ intent, session, response, action });
-      })
-      .catch((err) => {
-        console.log(err, err.stack); // an error occurred
-        response.tell('Sorry, sending the reminder failed.');
-      });
+    let time;
+    if (action.day) {
+      if (!action.time) {
+        action.time = moment().format('HH:mm');
+      }
+      time = moment(`${action.day} ${action.time}`);
+    } else if (action.time) {
+      time = moment(action.time, 'HH:mm');
+      if (time < moment()) {
+        time.add(1, 'days');
+      }
+    }
+    return moment.duration(moment().diff(time));
   }
 
+  // Reusable function for asking for a phone number
+  respondForPhoneNumber (response) {
+    const responseText = `I'll need your phone number to send you reminders. You'll only have to tell me once. What number should I use for sending reminders?`;
+    const shortResponse = `What phone number should I use for sending you reminders?`;
+    response.ask(responseText, shortResponse);
+  }
+
+  // ***************************
+  // End Utilities
+  // ***************************
+
+  // Intent Handler (built in): Launch
   handleLaunchRequest (launchRequest, session, response) {
     console.log('Handling launch request');
     this.lookupPhoneNumber(session)
@@ -102,58 +133,39 @@ export default class Reminder extends AlexaSkill {
       });
   }
 
-  writePhoneNumber ({intent, session, response, action}) {
-    const params = {
-      Item: {
-        userId: {
-          S: session.user.userId
-        },
-        phoneNumber: {
-          S: action.phoneNumber
-        }
-      },
-      TableName: 'RemindMeNumbers'
-    };
+  // ***************************
+  // Intent Handler: RemindMe
+  //     Complex intent - see utterances
+  // ***************************
+  handleNewReminderRequest (intent, session, response) {
+    const action = this.getAction(intent, session, Reminder.slots);
+    console.log('Handling new reminder request to: ', action.reminder, action.duration, action.time, action.day, action.phoneNumber);
 
-    dynamodb.putItem(params, (err, data) => {
-      if (err) {
+    this.handleReminderPhoneNumber({ intent, session, response, action })
+      .then(() => {
+        this.handleReminderEvent({ intent, session, response, action });
+      })
+      .catch((err) => {
         console.log(err, err.stack); // an error occurred
         response.tell('Sorry, sending the reminder failed.');
-        return;
-      }
-
-      this.continueRequest({ intent, session, response, action });
-    });
-  }
-
-  lookupPhoneNumber (session) {
-    const params = {
-      Key: {
-        'userId': {
-          S: session.user.userId
-        }
-      },
-      TableName: 'RemindMeNumbers'
-    };
-
-    return new Promise((resolve, reject) => {
-      dynamodb.getItem(params, (err, data) => {
-        if (err) {
-          return reject(err);
-        }
-        console.log('Pulled user from dynamo', data);
-        return resolve(data.Item && data.Item.phoneNumber && data.Item.phoneNumber.S);
       });
-    });
   }
 
-  respondForPhoneNumber (response) {
-    const responseText = `I'll need your phone number to send you reminders. You'll only have to tell me once. What number should I use for sending reminders?`;
-    const shortResponse = `What phone number should I use for sending you reminders?`;
-    response.ask(responseText, shortResponse);
+  handleReminderPhoneNumber ({ intent, session, response, action }) {
+    if (action.phoneNumber) {
+      return this.writePhoneNumber({ intent, session, response, action });
+    }
+
+    return this.lookupPhoneNumber(session)
+      .then((phoneNumber) => {
+        if (!phoneNumber) {
+          return this.respondForPhoneNumber(response);
+        }
+        action.phoneNumber = session.attributes.phoneNumber = phoneNumber;
+      });
   }
 
-  continueRequest ({intent, session, response, action}) {
+  handleReminderEvent ({intent, session, response, action}) {
     if (!action.duration && !action.day && !action.time) {
       const speechOutput = {
         speech: '<speak>When would you like to be reminded?</speak>',
@@ -178,25 +190,95 @@ export default class Reminder extends AlexaSkill {
     this.sendMessage({action, response});
   }
 
-  computeDuration (action) {
-    if (action.duration) {
-      return moment.duration(action.duration);
-    }
-    let time;
-    if (action.day) {
-      if (!action.time) {
-        action.time = moment().format('HH:mm');
-      }
-      time = moment(`${action.day} ${action.time}`);
-    } else if (action.time) {
-      time = moment(action.time, 'HH:mm');
-      if (time < moment()) {
-        time.add(1, 'days');
-      }
-    }
-    return moment.duration(moment().diff(time));
+  // ***************************
+  // End RemindMe Intent Core
+  // ***************************
+
+  // Intent handler:  (CheckMy|WhatIsMy) phone number?
+  handlePhoneNumberCheckRequest (intent, session, response) {
+    console.log('Handling phone number check request');
+    this.lookupPhoneNumber(session)
+      .then((phoneNumber) => {
+        if (phoneNumber) {
+          response.tell(`The number I have saved for sending you reminders is ${phoneNumber}.`);
+        } else {
+          response.tell(`I do not yet have a phone number saved for you. You can set one by saying "Update My phone number" or by setting a reminder.`);
+        }
+      })
+      .catch((err) => {
+        console.log(err, err.stack); // an error occurred
+        response.tell('Sorry, there was an error finding your information.');
+      });
   }
 
+  // Intent handler: (ChangeMy|UpdateMy) [phone ]number[ to {phoneNumber}]
+  handlePhoneNumberChangeRequest (intent, session, response) {
+    const action = this.getAction(intent, session, Reminder.slots);
+    console.log('Handling new phone number change request to: ', action.phoneNumber);
+
+    if (action.phoneNumber) {
+      return this.writePhoneNumber({ intent, session, response, action });
+    }
+
+    return this.respondForPhoneNumber(response);
+  }
+
+  // ***************************
+  // Dyamo helpers
+  // ***************************
+
+  writePhoneNumber ({intent, session, response, action}) {
+    const params = {
+      Item: {
+        userId: {
+          S: session.user.userId
+        },
+        phoneNumber: {
+          S: action.phoneNumber
+        }
+      },
+      TableName: 'RemindMeNumbers'
+    };
+
+    return new Promise((resolve, reject) => {
+      dynamodb.putItem(params, (err, data) => {
+        if (err) {
+          return reject(err);
+        }
+        return resolve();
+      });
+    });
+  }
+
+  lookupPhoneNumber (session) {
+    if (session.attributes.phoneNumber && isValidNumber(session.attributes.phoneNumber)) {
+      return Promise.resolve(session.attributes.phoneNumber);
+    }
+    const params = {
+      Key: {
+        'userId': {
+          S: session.user.userId
+        }
+      },
+      TableName: 'RemindMeNumbers'
+    };
+
+    return new Promise((resolve, reject) => {
+      dynamodb.getItem(params, (err, data) => {
+        if (err) {
+          return reject(err);
+        }
+        console.log('Pulled user from dynamo', data);
+        return resolve(data.Item && data.Item.phoneNumber && data.Item.phoneNumber.S);
+      });
+    });
+  }
+
+  // ***************************
+  // End Dyamo helpers
+  // ***************************
+
+  // TODO: this will actually move into a different lambda, alexa-remindme-process
   sendMessage ({action, response}) {
     const duration = this.computeDuration(action);
     const durationString = `${duration.humanize()} from now`;

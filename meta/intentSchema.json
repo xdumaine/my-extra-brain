@@ -26,6 +26,32 @@
       ]
     },
     {
+      "intent": "WhatIs",
+      "slots": []
+    },
+    {
+      "intent": "CheckMy",
+      "slots": []
+    },
+    {
+      "intent": "ChangeMy",
+      "slots": [
+        {
+          "name": "phoneNumber",
+          "type": "AMAZON.NUMBER"
+        }
+      ]
+    },
+    {
+      "intent": "UpdateMy",
+      "slots": [
+        {
+          "name": "phoneNumber",
+          "type": "AMAZON.NUMBER"
+        }
+      ]
+    },
+    {
       "intent": "AMAZON.HelpIntent"
     },
     {

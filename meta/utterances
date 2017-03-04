@@ -21,3 +21,17 @@ RemindMe {time} on {day}
 RemindMe {time}
 RemindMe at {time}
 RemindMe in {duration}
+CheckMy phone number
+CheckMy number
+WhatIs my phone number
+WhatIs my number
+ChangeMy phone number
+ChangeMy number
+UpdateMy phone number
+UpdateMy number
+ChangeMy phone number to {phoneNumber}
+ChangeMy number to {phoneNumber}
+UpdateMy phone number to {phoneNumber}
+UpdateMy number to {phoneNumber}
+ChangeMy {phoneNumber}
+UpdateMy {phoneNumber}
