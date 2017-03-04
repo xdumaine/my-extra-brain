@@ -15,7 +15,7 @@ export default class Reminder extends AlexaSkill {
     };
 
     parentEventHandlers.onLaunch = (launchRequest, session, response) => {
-      console.log(`onLuanch requestId: ${launchRequest.requestId}, sessionId: ${session.sessionId}`);
+      this.handleLaunchRequest(launchRequest, session, response);
     };
 
     parentEventHandlers.onSessionEnded = (sessionEndedRequest, session) => {
@@ -70,7 +70,36 @@ export default class Reminder extends AlexaSkill {
       return this.writePhoneNumber({ intent, session, response, action });
     }
 
-    this.lookupPhoneNumber({ intent, session, response, action });
+    this.lookupPhoneNumber(session)
+      .then((phoneNumber) => {
+        if (!phoneNumber) {
+          return this.respondForPhoneNumber(response);
+        }
+        action.phoneNumber = session.attributes.phoneNumber = phoneNumber;
+
+        this.continueRequest({ intent, session, response, action });
+      })
+      .catch((err) => {
+        console.log(err, err.stack); // an error occurred
+        response.tell('Sorry, sending the reminder failed.');
+      });
+  }
+
+  handleLaunchRequest (launchRequest, session, response) {
+    console.log('Handling launch request');
+    this.lookupPhoneNumber(session)
+      .then((phoneNumber) => {
+        if (phoneNumber) {
+          session.attributes.phoneNumber = phoneNumber;
+          response.ask('Hello. I already have a reminder number stored for you. I can set a reminder for you, or update your information.');
+        } else {
+          this.respondForPhoneNumber(response);
+        }
+      })
+      .catch((err) => {
+        console.log(err, err.stack); // an error occurred
+        response.tell('Sorry, there was an error finding your information.');
+      });
   }
 
   writePhoneNumber ({intent, session, response, action}) {
@@ -97,7 +126,7 @@ export default class Reminder extends AlexaSkill {
     });
   }
 
-  lookupPhoneNumber ({intent, session, response, action}) {
+  lookupPhoneNumber (session) {
     const params = {
       Key: {
         'userId': {
@@ -107,23 +136,18 @@ export default class Reminder extends AlexaSkill {
       TableName: 'RemindMeNumbers'
     };
 
-    dynamodb.getItem(params, (err, data) => {
-      if (err) {
-        console.log(err, err.stack); // an error occurred
-        response.tell('Sorry, sending the reminder failed.');
-        return;
-      }
-      console.log('Pulled user from dynamo', data);
-      if (!data.Item) {
-        return this.respondForPhoneNumber({ intent, session, response, action });
-      }
-      action.phoneNumber = session.attributes.phoneNumber = data.Item.phoneNumber.S;
-
-      this.continueRequest({ intent, session, response, action });
+    return new Promise((resolve, reject) => {
+      dynamodb.getItem(params, (err, data) => {
+        if (err) {
+          return reject(err);
+        }
+        console.log('Pulled user from dynamo', data);
+        return resolve(data.Item && data.Item.phoneNumber && data.Item.phoneNumber.S);
+      });
     });
   }
 
-  respondForPhoneNumber ({intent, session, response, action}) {
+  respondForPhoneNumber (response) {
     const responseText = `I'll need your phone number to send you reminders. You'll only have to tell me once. What number should I use for sending reminders?`;
     const shortResponse = `What phone number should I use for sending you reminders?`;
     response.ask(responseText, shortResponse);
