@@ -8,6 +8,10 @@ function isValidNumber (phoneNumber) {
   return phoneNumber && phoneNumber.length > 6;
 }
 
+function phoneNumberAsWords (phoneNumber) {
+  return phoneNumber.split('').join(' ');
+}
+
 export default class Reminder extends AlexaSkill {
   static get slots () {
     return ['reminder', 'duration', 'day', 'time', 'phoneNumber'];
@@ -70,15 +74,16 @@ export default class Reminder extends AlexaSkill {
   // and saves slot values to session attributes
   getAction (intent, session, slots) {
     const action = {};
-    slots.forEach(function (slot) {
-      if (intent.slots[slot] && intent.slots[slot].value) {
-        action[slot] = intent.slots[slot].value;
+    slots.forEach(function (slotKey) {
+      const slot = intent.slots[slotKey];
+      if (slot && slot.value && slot.value !== '?') {
+        action[slotKey] = slot.value;
       } else {
-        action[slot] = session.attributes[slot];
+        action[slotKey] = session.attributes[slotKey];
       }
     });
-    slots.forEach(function (slot) {
-      session.attributes[slot] = action[slot];
+    slots.forEach(function (slotKey) {
+      session.attributes[slotKey] = action[slotKey];
     });
     return action;
   }
@@ -105,9 +110,12 @@ export default class Reminder extends AlexaSkill {
   }
 
   // Reusable function for asking for a phone number
-  respondForPhoneNumber (response) {
+  respondForPhoneNumber (response, short) {
     const responseText = `I'll need your phone number to send you reminders. You'll only have to tell me once. What number should I use for sending reminders?`;
     const shortResponse = `What phone number should I use for sending you reminders?`;
+    if (short) {
+      return response.ask(shortResponse, shortResponse);
+    }
     response.ask(responseText, shortResponse);
   }
 
@@ -153,7 +161,11 @@ export default class Reminder extends AlexaSkill {
 
   handleReminderPhoneNumber ({ intent, session, response, action }) {
     if (action.phoneNumber) {
-      return this.writePhoneNumber({ intent, session, response, action });
+      return this.writePhoneNumber({ intent, session, response, action })
+        .catch('InvalidPhoneNumber', (e) => {
+          response.tell('Sorry, that phone number is invalid.');
+          throw e;
+        });
     }
 
     return this.lookupPhoneNumber(session)
@@ -200,7 +212,7 @@ export default class Reminder extends AlexaSkill {
     this.lookupPhoneNumber(session)
       .then((phoneNumber) => {
         if (phoneNumber) {
-          response.tell(`The number I have saved for sending you reminders is ${phoneNumber}.`);
+          response.tell(`The number I have saved for sending you reminders is ${phoneNumberAsWords(phoneNumber)}.`);
         } else {
           response.tell(`I do not yet have a phone number saved for you. You can set one by saying "Update My phone number" or by setting a reminder.`);
         }
@@ -217,17 +229,31 @@ export default class Reminder extends AlexaSkill {
     console.log('Handling new phone number change request to: ', action.phoneNumber);
 
     if (action.phoneNumber) {
-      return this.writePhoneNumber({ intent, session, response, action });
+      return this.writePhoneNumber({ intent, session, action })
+        .then(() => {
+          response.tell(`I've updated your reminder phone number to ${phoneNumberAsWords(action.phoneNumber)}.`);
+        })
+        .catch((e) => {
+          response.tell('Uh oh. something went wrong');
+          throw e;
+        });
     }
 
-    return this.respondForPhoneNumber(response);
+    return this.respondForPhoneNumber(response, true);
   }
 
   // ***************************
   // Dyamo helpers
   // ***************************
 
-  writePhoneNumber ({intent, session, response, action}) {
+  writePhoneNumber ({intent, session, action}) {
+    if (!isValidNumber(action.phoneNumber)) {
+      const e = new Error('InvalidPhoneNumber');
+      e.details = action.phoneNumber;
+      console.log(e);
+      return Promise.reject(e);
+    }
+
     const params = {
       Item: {
         userId: {
