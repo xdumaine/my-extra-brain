@@ -48,15 +48,15 @@ export default class Reminder extends AlexaSkill {
       ChangeMy: this.handlePhoneNumberChangeRequest.bind(this),
       UpdateMy: this.handlePhoneNumberChangeRequest.bind(this),
 
-      'AMAZON.HelpIntent' (intent, session, response) {
+      'AMAZON.HelpIntent' (request, session, response) {
         response.ask('You can say "RemindMe at 10pm to wash the car."', 'What can I help you with?');
       },
 
-      'AMAZON.StopIntent' (intent, session, response) {
+      'AMAZON.StopIntent' (request, session, response) {
         response.tell('Your Reminder was canceled');
       },
 
-      'AMAZON.CancelIntent' (intent, session, response) {
+      'AMAZON.CancelIntent' (request, session, response) {
         response.tell('Your Reminder was canceled');
       }
     };
@@ -70,18 +70,21 @@ export default class Reminder extends AlexaSkill {
   // Utilities
   // ***************************
 
-  // parses slot values out of intent into an `action` for easier access
+  // parses slot values out of request into an `action` for easier access
   // and saves slot values to session attributes
-  getAction (intent, session, slots) {
+  getAction (request, session, slots) {
     const action = {};
     slots.forEach(function (slotKey) {
-      const slot = intent.slots[slotKey];
+      const slot = request.intent.slots[slotKey];
       if (slot && slot.value && slot.value !== '?') {
         action[slotKey] = slot.value;
       } else {
         action[slotKey] = session.attributes[slotKey];
       }
     });
+    session.attributes.timestamp = action.timestamp = request.timestamp;
+    action.locale = request.locale;
+    action.requestId = request.requestId;
     slots.forEach(function (slotKey) {
       session.attributes[slotKey] = action[slotKey];
     });
@@ -189,8 +192,8 @@ export default class Reminder extends AlexaSkill {
     }
 
     if (!action.reminder) {
-      var reminderPrompt = 'What should I remind you to do?';
-      var reminderOutput = {
+      const reminderPrompt = 'What should I remind you to do?';
+      const reminderOutput = {
         speech: reminderPrompt,
         type: AlexaSkill.speechOutputType.PLAIN_TEXT
       };
@@ -199,7 +202,16 @@ export default class Reminder extends AlexaSkill {
       return;
     }
 
-    this.sendMessage({action, response});
+    this.createReminderRecord(session, action)
+      .then(() => {
+        const duration = this.computeDuration(action);
+        const done = `Your reminder to ${action.reminder} is set for ${duration.humanize()} from now.`;
+        response.tell(done);
+      })
+      .catch((e) => {
+        console.log('Error creating reminder record', e);
+        response.tell('Sorry, sending the reminder failed.');
+      });
   }
 
   // ***************************
@@ -224,12 +236,12 @@ export default class Reminder extends AlexaSkill {
   }
 
   // Intent handler: (ChangeMy|UpdateMy) [phone ]number[ to {phoneNumber}]
-  handlePhoneNumberChangeRequest (intent, session, response) {
-    const action = this.getAction(intent, session, Reminder.slots);
+  handlePhoneNumberChangeRequest (request, session, response) {
+    const action = this.getAction(request, session, Reminder.slots);
     console.log('Handling new phone number change request to: ', action.phoneNumber);
 
     if (action.phoneNumber) {
-      return this.writePhoneNumber({ intent, session, action })
+      return this.writePhoneNumber({ session, action })
         .then(() => {
           response.tell(`I've updated your reminder phone number to ${phoneNumberAsWords(action.phoneNumber)}.`);
         })
@@ -246,7 +258,7 @@ export default class Reminder extends AlexaSkill {
   // Dyamo helpers
   // ***************************
 
-  writePhoneNumber ({intent, session, action}) {
+  writePhoneNumber ({session, action}) {
     if (!isValidNumber(action.phoneNumber)) {
       const e = new Error('InvalidPhoneNumber');
       e.details = action.phoneNumber;
@@ -296,6 +308,39 @@ export default class Reminder extends AlexaSkill {
         }
         console.log('Pulled user from dynamo', data);
         return resolve(data.Item && data.Item.phoneNumber && data.Item.phoneNumber.S);
+      });
+    });
+  }
+
+  createReminderRecord (session, action) {
+    const duration = this.computeDuration(action);
+    const init = moment(action.timestamp);
+    const ttl = init.add(duration.asSeconds(), 'seconds').toISOString();
+    const params = {
+      Item: {
+        reminderId: {
+          S: action.requestId
+        },
+        userId: {
+          S: session.user.userId
+        },
+        ttl: {
+          S: ttl
+        },
+        reminder: {
+          S: action.reminder
+        }
+      },
+      TableName: 'RemindMeReminders'
+    };
+    console.log('creating reminder record', params);
+
+    return new Promise((resolve, reject) => {
+      dynamodb.putItem(params, (err, data) => {
+        if (err) {
+          return reject(err);
+        }
+        return resolve();
       });
     });
   }

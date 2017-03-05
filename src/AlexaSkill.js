@@ -54,7 +54,7 @@ export default class AlexaSkill {
         const intentHandler = this.intentHandlers[intentName];
         if (intentHandler) {
           console.log('dispatch intent = ' + intentName);
-          intentHandler.call(this, intent, session, response);
+          intentHandler.call(this, intentRequest, session, response);
         } else {
           throw new Error(`Unsupported intent: ${intentName}`);
         }
